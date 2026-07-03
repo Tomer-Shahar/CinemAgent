@@ -1,0 +1,14 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Node / Dependencies
+node_modules/
+dist/
+build/
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
