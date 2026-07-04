@@ -144,7 +144,7 @@ def search_imdb_autocomplete(query: str) -> str:
         print(f"IMDb Autocomplete error for '{query}': {e}")
     return None
 
-def search_imdb_data(movie_titles) -> dict:
+def search_imdb_data(movie_titles, b64_posters=False) -> dict:
     """Fetches movie metadata (IMDb url/score, RT score, Poster, Plot, Year) from OMDb API for movie titles."""
     import requests
     import os
@@ -367,6 +367,13 @@ def search_imdb_data(movie_titles) -> dict:
         except Exception:
             pass
             
+    if not b64_posters:
+        import copy
+        results_clean = copy.deepcopy(results)
+        for title, meta in results_clean.items():
+            if meta.get("poster_url", "").startswith("data:"):
+                meta["poster_url"] = "[Base64 Cached Image]"
+        return results_clean
     return results
 
 def save_screenings_to_db(screenings: list) -> str:
@@ -410,7 +417,7 @@ def save_screenings_to_db(screenings: list) -> str:
 
         # 2. Extract unique titles and fetch IMDb metadata
         titles = list(set(s.get("title") for s in screenings if s.get("title")))
-        imdb_data = search_imdb_data(titles)
+        imdb_data = search_imdb_data(titles, b64_posters=True)
         
         # 3. Merge metadata with screenings
         for s in screenings:
