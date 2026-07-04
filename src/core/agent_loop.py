@@ -66,10 +66,12 @@ def run_agent_loop(user_goal: str):
         # 2. Parse the structured output
         try:
             decision = json.loads(response.text)
-        except json.JSONDecodeError:
-            print("Failed to parse agent response as JSON. Retrying with correction nudge...")
+            if not isinstance(decision, dict):
+                raise ValueError("Response is not a JSON object (dict)")
+        except (json.JSONDecodeError, ValueError) as err:
+            print(f"Failed to parse agent response or response not a dict: {err}. Retrying with correction nudge...")
             contents.append(types.Content(role="model", parts=[types.Part.from_text(text=response.text)]))
-            contents.append(types.Content(role="user", parts=[types.Part.from_text(text="Your last response was not valid JSON. Please repeat using the exact JSON schema requested.")]))
+            contents.append(types.Content(role="user", parts=[types.Part.from_text(text="Your last response was not a valid JSON object matching the requested schema. Please repeat using the exact JSON schema with 'thought', 'action', 'action_input', and 'final_answer' keys.")]))
             continue
 
         print(f"\n[Iteration {iteration}] Thought: {decision.get('thought')}")
