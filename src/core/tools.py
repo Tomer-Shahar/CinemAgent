@@ -399,7 +399,7 @@ def save_screenings_to_db(screenings: list) -> str:
             # Clean up specific titles and typos
             if "Miniions" in title:
                 title = title.replace("Miniions", "Minions")
-            if "Minions & Monsters" in title:
+            if "Minions & Monsters" in title or "מיניונים ומפלצות" in title:
                 title = "Minions and Monsters"
             s["title"] = title
             
