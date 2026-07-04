@@ -114,12 +114,27 @@
                     return;
                 }
 
-                // Group screenings by title + cinema (excluding past screenings)
+                // Group screenings by title + cinema (excluding past screenings in Tel Aviv time)
                 const groups = {};
-                const now = new Date();
+                
+                // Get current Tel Aviv date/time in YYYY-MM-DDTHH:MM format
+                const formatter = new Intl.DateTimeFormat("en-US", {
+                    timeZone: "Asia/Jerusalem",
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false
+                });
+                const parts = formatter.formatToParts(new Date());
+                const partMap = {};
+                parts.forEach(p => partMap[p.type] = p.value);
+                const currentTelAvivStr = `${partMap.year}-${partMap.month}-${partMap.day}T${partMap.hour}:${partMap.minute}`;
+
                 screenings.forEach(screening => {
-                    const screeningTime = new Date(`${screening.date}T${screening.time}`);
-                    if (screeningTime < now) {
+                    const screeningStr = `${screening.date}T${screening.time}`;
+                    if (screeningStr < currentTelAvivStr) {
                         return; // Skip screenings in the past
                     }
                     
@@ -254,7 +269,7 @@
                         metaDiv.appendChild(cinemaSpan);
                     }
 
-                    // Showtimes Selector
+                    // Showtimes Selector or Static Text
                     const selectContainer = document.createElement('div');
                     selectContainer.className = "flex items-center gap-2 pl-4 border-l border-gray-700/60";
                     
@@ -263,22 +278,31 @@
                     selectLabel.textContent = "Showtime:";
                     selectContainer.appendChild(selectLabel);
 
-                    const selectEl = document.createElement('select');
-                    selectEl.className = "bg-cinema-bg border border-gray-700 text-gray-200 rounded-lg px-2 py-1 text-sm font-medium focus:outline-none focus:border-cinema-accent/60 cursor-pointer";
-                    
-                    group.showtimes.forEach((st, idx) => {
-                        const opt = document.createElement('option');
-                        opt.value = idx;
-                        opt.textContent = `${formatDate(st.date)} @ ${st.time}`;
-                        selectEl.appendChild(opt);
-                    });
-                    selectContainer.appendChild(selectEl);
+                    let selectEl;
+                    if (group.showtimes.length > 1) {
+                        selectEl = document.createElement('select');
+                        selectEl.className = "bg-cinema-bg border border-gray-700 text-gray-200 rounded-lg px-2 py-1 text-sm font-medium focus:outline-none focus:border-cinema-accent/60 cursor-pointer";
+                        
+                        group.showtimes.forEach((st, idx) => {
+                            const opt = document.createElement('option');
+                            opt.value = idx;
+                            opt.textContent = `${formatDate(st.date)} @ ${st.time}`;
+                            selectEl.appendChild(opt);
+                        });
+                        selectContainer.appendChild(selectEl);
+                    } else {
+                        const st = group.showtimes[0];
+                        const textSpan = document.createElement('span');
+                        textSpan.className = "text-gray-200 text-sm font-medium";
+                        textSpan.textContent = `${formatDate(st.date)} @ ${st.time}`;
+                        selectContainer.appendChild(textSpan);
+                    }
                     metaDiv.appendChild(selectContainer);
 
                     infoSection.appendChild(metaDiv);
                     card.appendChild(infoSection);
 
-                    // 3. Action Button (Tickets)
+                    // 3. Action Button (Tickets/Details)
                     const actionDiv = document.createElement('div');
                     actionDiv.className = "flex sm:flex-col justify-end w-full sm:w-auto self-stretch sm:self-center";
                     
@@ -289,8 +313,9 @@
 
                     // Set initial ticket link and listener to update on selection change
                     const updateTicketLink = () => {
-                        const selectedIdx = selectEl.value;
-                        const selectedShowtime = group.showtimes[selectedIdx];
+                        const selectedShowtime = selectEl 
+                            ? group.showtimes[selectEl.value] 
+                            : group.showtimes[0];
                         if (selectedShowtime && selectedShowtime.ticket_url) {
                             ticketBtn.href = selectedShowtime.ticket_url;
                             ticketBtn.classList.remove('opacity-50', 'pointer-events-none');
@@ -300,7 +325,9 @@
                         }
                     };
                     
-                    selectEl.addEventListener('change', updateTicketLink);
+                    if (selectEl) {
+                        selectEl.addEventListener('change', updateTicketLink);
+                    }
                     updateTicketLink(); // Initial run
 
                     actionDiv.appendChild(ticketBtn);

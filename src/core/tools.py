@@ -150,6 +150,7 @@ def search_imdb_data(movie_titles) -> dict:
     import os
     import re
     import urllib.parse
+    import json
     
     if isinstance(movie_titles, str):
         movie_titles = [movie_titles]
@@ -157,8 +158,28 @@ def search_imdb_data(movie_titles) -> dict:
     api_key = os.environ.get("OMDB_KEY")
     results = {}
     
+    # Load local cache if available
+    cache_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output", "imdb_cache.json")
+    cache = {}
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+        except Exception:
+            pass
+            
+    titles_to_query = []
+    for title in movie_titles:
+        if title in cache and cache[title].get("imdb_url") and "find?q=" not in cache[title].get("imdb_url", ""):
+            results[title] = cache[title]
+        else:
+            titles_to_query.append(title)
+            
+    if not titles_to_query:
+        return results
+        
     if not api_key:
-        for title in movie_titles:
+        for title in titles_to_query:
             results[title] = {
                 "imdb_url": f"https://www.imdb.com/find?q={title}",
                 "imdb_score": "N/A",
@@ -169,7 +190,7 @@ def search_imdb_data(movie_titles) -> dict:
             }
         return results
         
-    for title in movie_titles:
+    for title in titles_to_query:
         try:
             data = None
             
@@ -333,6 +354,18 @@ def search_imdb_data(movie_titles) -> dict:
                 "plot": "",
                 "year": ""
             }
+            
+    # Update cache and save to file
+    if titles_to_query:
+        for title in titles_to_query:
+            if title in results:
+                cache[title] = results[title]
+        try:
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(cache, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
             
     return results
 
