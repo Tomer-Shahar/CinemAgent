@@ -51,9 +51,13 @@ GOAL = """
            - The time is always `21:00` unless explicitly stated otherwise.
            - Extract the movie titles. They have both Hebrew and English names (e.g. `עולמו של ווין בשיתוף דיגידוג | Wayne's World`). Use the English title (e.g. `Wayne's World`) for search_imdb_data and the database record, unless it is a local Israeli movie.
              
-        Hebrew vs. English Naming Rules (Jaffa & Cinemateque):
-        - If the movie is Israeli (locally produced/original Hebrew movie), you MUST keep the title in Hebrew. Example: `מציצים` or `האחד והיחיד שלי`.
-        - If the movie is international/foreign (English/French/etc.), you MUST translate the title to English (or use the English title returned by OMDb metadata). Example: `פרנקנשטיין הצעיר` -> `Young Frankenstein`.
+        Hebrew vs. English Naming and Querying Rules:
+        - For any movie on Jaffa Cinema or Tel-Aviv Cinemateque, if the homepage title contains BOTH Hebrew and English (separated by `|`), you MUST NOT scrape its detail page. Use the English portion (e.g., `The Ties That Bind Us` from `מה שמחבר בינינו | The Ties That Bind Us`) directly.
+        - You MUST only scrape the event detail page URL if the title is purely in Hebrew with no English translation provided on the homepage.
+        - You MUST check the scraped cinema website text (both Jaffa Cinema and Tel-Aviv Cinemateque) for any English titles/translations listed in the details or event descriptions (e.g. "Cologne 75" or "Minions & Monsters" or "Minions and Monsters" or "The Ties That Bind Us").
+        - If an English title/name is mentioned on the cinema website for the movie, you MUST use that English title to query OMDb/IMDb (via search_imdb_data) and store it in the database (since this ensures accurate matching). E.g. for `קלן 75` use the English name `Cologne 75` or `Köln 75` if present on the page; for `מיניונים ומפלצות` use `Minions & Monsters` or `Minions and Monsters`.
+        - Only if there is no English title/name mentioned on the website AND the movie is Israeli (locally produced Hebrew movie), you should keep the title in Hebrew. Example: `מציצים` or `האחד והיחיד שלי`.
+        - For foreign/international films, if no English title is found on the website (even after checking the detail page), translate the Hebrew title to English before querying OMDb (or use the English title returned by OMDb search).
 
         Grounding Rules:
         - DO NOT hallucinate or rely on your pre-trained knowledge about these websites or their historical schedules.

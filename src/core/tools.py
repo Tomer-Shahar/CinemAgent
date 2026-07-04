@@ -3,15 +3,84 @@ from bs4 import BeautifulSoup
 
 def scrape_cinema_page(url: str) -> str:
     """Scrapes raw text layout from a given Tel Aviv cinema URL, preserving link hrefs."""
+    import urllib.parse
+    
+    # Intercept SharePoint list pages on tel-aviv.gov.il to retrieve data directly from public REST API
+    if "tel-aviv.gov.il" in url and "ListID=" in url and "ItemID=" in url:
+        try:
+            from urllib.parse import urlparse, parse_qs
+            parsed_url = urlparse(url)
+            params = parse_qs(parsed_url.query)
+            web_id = params.get("WebID", [""])[0].strip("{}")
+            list_id = params.get("ListID", [""])[0].strip("{}")
+            item_id = params.get("ItemID", [""])[0].strip("{}")
+            
+            site_id = "24aa409e-01ed-482e-b0ed-1956972addb1"
+            view_list = urllib.parse.quote('תצוגת דף פריט ראשי - לא לגעת')
+            
+            api_url = f"https://www.tel-aviv.gov.il/_vti_bin/TlvSP2013PublicSite/TlvItem.svc/GetItemByViewForEvent/{site_id}/{web_id}/{list_id}/{view_list}/{item_id}"
+            
+            r = requests.get(api_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                fields = data.get("Fields", [])
+                text_parts = []
+                for f in fields:
+                    caption = f.get("Caption", "")
+                    val = f.get("Value", "")
+                    if val:
+                        val_cleaned = BeautifulSoup(str(val), 'html.parser').get_text().strip()
+                        text_parts.append(f"{caption}: {val_cleaned}")
+                return "\n".join(text_parts)
+        except Exception as e:
+            print(f"Error querying Tel Aviv REST API: {e}")
+
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     
     # Extract only the movie slider boxes for the Cinemateque homepage to prevent context overflow
+    # Extract only the movie slider boxes for the Cinemateque homepage to prevent context overflow
     if "cinema.co.il" in url and (url.rstrip('/').endswith("cinema.co.il") or "main" in url):
-        sliders = soup.find_all(class_="movie-slider-box")
-        if sliders:
-            html_content = "".join([str(s) for s in sliders])
+        slides = soup.find_all(class_="movie-slid")
+        if slides:
+            import concurrent.futures
+            
+            def process_slide(slide):
+                try:
+                    a_tags = slide.find_all('a', href=True)
+                    event_url = None
+                    for tag in a_tags:
+                        href = tag['href']
+                        if "/event/" in href:
+                            event_url = href
+                            break
+                            
+                    if event_url:
+                        if not event_url.startswith('http'):
+                            event_url = urllib.parse.urljoin("https://www.cinema.co.il/", event_url)
+                        
+                        # Find Hebrew text elements specifically inside this slide
+                        for el in slide.find_all(text=True):
+                            heb_title = el.strip()
+                            # Check if contains Hebrew characters (range 1424-1514)
+                            if heb_title and len(heb_title) > 2 and any(1424 <= ord(c) <= 1514 for c in heb_title):
+                                if "לפרטים" in heb_title or "לרכישה" in heb_title or "/" in heb_title:
+                                    continue
+                                r = requests.get(event_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+                                if r.status_code == 200:
+                                    sub_soup = BeautifulSoup(r.text, 'html.parser')
+                                    for text in sub_soup.stripped_strings:
+                                        if heb_title in text and "|" in text:
+                                            el.replace_with(text)
+                                            return
+                except Exception:
+                    pass
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                list(executor.map(process_slide, slides))
+                
+            html_content = "".join([str(s) for s in slides])
             soup = BeautifulSoup(html_content, 'html.parser')
     # Strip scripts/styles to save token window
     for script in soup(["script", "style"]):
@@ -80,6 +149,7 @@ def search_imdb_data(movie_titles) -> dict:
     import requests
     import os
     import re
+    import urllib.parse
     
     if isinstance(movie_titles, str):
         movie_titles = [movie_titles]
@@ -103,20 +173,33 @@ def search_imdb_data(movie_titles) -> dict:
         try:
             data = None
             
-            # --- TIER 1: Try OMDb Exact Match ---
-            url = f"http://www.omdbapi.com/?apikey={api_key}&t={title}"
-            try:
-                response = requests.get(url, timeout=5)
-                res_data = response.json()
-                if res_data.get("Response") == "True":
-                    data = res_data
-            except Exception:
-                pass
-                
-            # --- TIER 1.5: Swap 'and' for '&' ---
+            # --- TIER 1: Try IMDb Autocomplete first (ranked by popularity/relevance) ---
+            imdb_id = search_imdb_autocomplete(title)
+            if imdb_id:
+                id_url = f"http://www.omdbapi.com/?apikey={api_key}&i={imdb_id}&plot=full"
+                try:
+                    response = requests.get(id_url, timeout=5)
+                    res_data = response.json()
+                    if res_data.get("Response") == "True":
+                        data = res_data
+                except Exception:
+                    pass
+                    
+            # --- TIER 2: Try OMDb Exact Match as fallback ---
+            if not data or data.get("Response") != "True":
+                url = f"http://www.omdbapi.com/?apikey={api_key}&t={urllib.parse.quote(title)}&plot=full"
+                try:
+                    response = requests.get(url, timeout=5)
+                    res_data = response.json()
+                    if res_data.get("Response") == "True":
+                        data = res_data
+                except Exception:
+                    pass
+                    
+            # --- TIER 2.5: Swap 'and' for '&' ---
             if (not data or data.get("Response") != "True") and " and " in title:
                 alt_title = title.replace(" and ", " & ")
-                url = f"http://www.omdbapi.com/?apikey={api_key}&t={alt_title}"
+                url = f"http://www.omdbapi.com/?apikey={api_key}&t={urllib.parse.quote(alt_title)}&plot=full"
                 try:
                     response = requests.get(url, timeout=5)
                     res_data = response.json()
@@ -125,23 +208,10 @@ def search_imdb_data(movie_titles) -> dict:
                 except Exception:
                     pass
 
-            # --- TIER 2: Try IMDb Autocomplete fallback ---
-            if not data or data.get("Response") != "True":
-                imdb_id = search_imdb_autocomplete(title)
-                if imdb_id:
-                    id_url = f"http://www.omdbapi.com/?apikey={api_key}&i={imdb_id}"
-                    try:
-                        response = requests.get(id_url, timeout=5)
-                        res_data = response.json()
-                        if res_data.get("Response") == "True":
-                            data = res_data
-                    except Exception:
-                        pass
-
             # --- TIER 3: Try OMDb Search + Local difflib fuzzy selection ---
             if not data or data.get("Response") != "True":
                 import difflib
-                search_url = f"http://www.omdbapi.com/?apikey={api_key}&s={title}"
+                search_url = f"http://www.omdbapi.com/?apikey={api_key}&s={urllib.parse.quote(title)}"
                 try:
                     search_res = requests.get(search_url, timeout=5).json()
                     if search_res.get("Response") == "True" and search_res.get("Search"):
@@ -155,7 +225,7 @@ def search_imdb_data(movie_titles) -> dict:
                             for item in search_items:
                                 if item.get("Title") == best_match:
                                     matched_id = item.get("imdbID")
-                                    id_url = f"http://www.omdbapi.com/?apikey={api_key}&i={matched_id}"
+                                    id_url = f"http://www.omdbapi.com/?apikey={api_key}&i={matched_id}&plot=full"
                                     res_data = requests.get(id_url, timeout=5).json()
                                     if res_data.get("Response") == "True":
                                         data = res_data
@@ -169,7 +239,7 @@ def search_imdb_data(movie_titles) -> dict:
                 if len(words) > 2:
                     import difflib
                     short_title = " ".join(words[:2])
-                    search_url = f"http://www.omdbapi.com/?apikey={api_key}&s={short_title}"
+                    search_url = f"http://www.omdbapi.com/?apikey={api_key}&s={urllib.parse.quote(short_title)}"
                     try:
                         search_resp = requests.get(search_url, timeout=5).json()
                         if search_resp.get("Response") == "True" and search_resp.get("Search"):
@@ -179,12 +249,44 @@ def search_imdb_data(movie_titles) -> dict:
                                 if any(w.lower() in item["Title"].lower() for w in words):
                                     selected_id = item["imdbID"]
                                     break
-                            id_url = f"http://www.omdbapi.com/?apikey={api_key}&i={selected_id}"
+                            id_url = f"http://www.omdbapi.com/?apikey={api_key}&i={selected_id}&plot=full"
                             res_data = requests.get(id_url, timeout=5).json()
                             if res_data.get("Response") == "True":
                                 data = res_data
                     except Exception:
                         pass
+            # --- TIER 5: Fallback to direct public IMDb Autocomplete API suggestions if OMDb fails/limit reached ---
+            if not data or data.get("Response") != "True":
+                try:
+                    query_clean = "".join(c for c in title if c.isalnum() or c.isspace()).strip()
+                    if query_clean:
+                        query_encoded = urllib.parse.quote(query_clean.lower())
+                        first_char = query_encoded[0]
+                        url = f"https://v3.sg.media-imdb.com/suggestion/{first_char}/{query_encoded}.json"
+                        response = requests.get(url, timeout=5)
+                        if response.status_code == 200:
+                            suggestions = response.json().get("d", [])
+                            match = None
+                            for item in suggestions:
+                                if item.get("qid") in ("movie", "feature"):
+                                    match = item
+                                    break
+                            if not match and suggestions:
+                                match = suggestions[0]
+                            if match:
+                                imdb_id = match.get("id")
+                                data = {
+                                    "Response": "True",
+                                    "Title": match.get("l"),
+                                    "Year": str(match.get("y", "")),
+                                    "imdbRating": "N/A",
+                                    "imdbID": imdb_id,
+                                    "Genre": "",
+                                    "Plot": "",
+                                    "Poster": match.get("i", {}).get("imageUrl", "") if match.get("i") else ""
+                                }
+                except Exception:
+                    pass
             
             if data and data.get("Response") == "True":
                 imdb_score = data.get("imdbRating", "N/A")
