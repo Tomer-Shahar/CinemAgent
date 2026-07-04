@@ -30,15 +30,6 @@ def run_agent_loop(user_goal: str):
     
     max_iterations = 30
     for iteration in range(max_iterations):
-        # Prune older scrape observations to conserve tokens and prevent 429 Rate Limits
-        for content in contents[:-1]:
-            for p, part in enumerate(content.parts):
-                text = part.text
-                if text and "Observation from tool [scrape_cinema_page]" in text and len(text) > 1000:
-                    content.parts[p] = types.Part.from_text(
-                        text="Observation from tool [scrape_cinema_page]: (Raw text layout of the cinema page was successfully parsed by you in a previous step. Truncated to save tokens.)"
-                    )
-
         # 1. Ask the LLM for its next thought and action with exponential backoff on 429 rate limits
         retry_delay = 16
         for attempt in range(6):

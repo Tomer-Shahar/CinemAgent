@@ -403,6 +403,13 @@ def save_screenings_to_db(screenings: list) -> str:
                 title = "Minions and Monsters"
             s["title"] = title
             
+            # Correct any year errors in the screening date (all current screenings are in 2026)
+            date_str = s.get("date", "")
+            if date_str:
+                if date_str.startswith("2024-") or date_str.startswith("2025-"):
+                    date_str = "2026-" + date_str[5:]
+                    s["date"] = date_str
+            
             # Clean up cinema names
             cinema = s.get("cinema", "")
             if "Cinemateque" in cinema:
