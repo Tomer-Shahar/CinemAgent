@@ -9,6 +9,15 @@ dist/
 build/
 coverage/
 
+# Python Virtual Environments and Caches
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local Backups
+src/output/*.json

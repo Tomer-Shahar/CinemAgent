@@ -52,44 +52,6 @@ create table screenings (
 
 ---
 
-## Local Setup
-
-### 1. Requirements & Interpreter
-Ensure you have **Python 3.11+** installed.
-
-### 2. Install Dependencies
-Set up your virtual environment and install the required packages:
-```bash
-# Activate your venv
-.venv\Scripts\activate
-
-# Install requirements
-pip install -r requirements.txt
-```
-
-### 3. Environment Variables
-Create a `.env` file at the root of the project with your secrets:
-```env
-GEMINI_API_KEY=your_gemini_api_key
-SUPABASE_PROJECT_URL=https://your-project-id.supabase.co
-SUPABASE_KEY=your-supabase-service-role-or-anon-key
-```
-
-### 4. Run the Scraper
-To manually run the scraper agent loop:
-```bash
-python src/run.py
-```
-
-### 5. Run the Website Locally
-To spin up a simple local server to preview the site:
-```bash
-python -m http.server 8000
-```
-Then navigate to: `http://localhost:8000/src/index.html`
-
----
-
 ## Deployment
 
 * **Frontend**: Push the repository to GitHub, link it to **Vercel**, and configure Vercel to serve `src` as the root directory or configure it to deploy `src/index.html`.
