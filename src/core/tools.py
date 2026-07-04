@@ -371,10 +371,12 @@ def search_imdb_data(movie_titles) -> dict:
 
 def save_screenings_to_db(screenings: list) -> str:
     """Saves a list of movie screenings to the Supabase database, overwriting existing records.
-    Each screening dict can contain: 'title', 'date', 'time', 'cinema', 'year', and 'ticket_url'.
+    Each screening dict can contain: 'title', 'date', 'time', 'cinema', 'year', 'ticket_url',
+    and optionally 'plot', 'poster_url', etc.
     """
     from supabase import create_client, Client
     import os
+    import json
     
     url = os.environ.get("SUPABASE_PROJECT_URL")
     key = os.environ.get("SUPABASE_KEY")
@@ -382,14 +384,68 @@ def save_screenings_to_db(screenings: list) -> str:
         return "Error: Supabase environment variables not found in .env"
         
     try:
-        # Also save the screenings locally as a JSON file
-        import json
+        # 1. Clean titles and deduplicate screenings
+        unique_screenings = []
+        seen = set()
+        for s in screenings:
+            title = s.get("title", "").strip()
+            # Clean up specific titles and typos
+            if "Miniions" in title:
+                title = title.replace("Miniions", "Minions")
+            if "Minions & Monsters" in title:
+                title = "Minions and Monsters"
+            s["title"] = title
+            
+            # Clean up cinema names
+            cinema = s.get("cinema", "")
+            if "Cinemateque" in cinema:
+                cinema = "Tel-Aviv Cinematheque"
+            s["cinema"] = cinema
+            
+            k = (title, s.get("date"), s.get("time"), cinema)
+            if k not in seen:
+                seen.add(k)
+                unique_screenings.append(s)
+        screenings = unique_screenings
+
+        # 2. Extract unique titles and fetch IMDb metadata
+        titles = list(set(s.get("title") for s in screenings if s.get("title")))
+        imdb_data = search_imdb_data(titles)
+        
+        # 3. Merge metadata with screenings
+        for s in screenings:
+            title = s.get("title")
+            meta = imdb_data.get(title, {})
+            
+            s["imdb_url"] = meta.get("imdb_url") or s.get("imdb_url") or f"https://www.imdb.com/find?q={title}"
+            s["imdb_score"] = meta.get("imdb_score") or s.get("imdb_score") or "N/A"
+            s["rt_score"] = meta.get("rt_score") or s.get("rt_score") or "N/A"
+            
+            year_val = s.get("year")
+            if not year_val or year_val in ("N/A", "None", "None"):
+                s["year"] = meta.get("year") or s.get("year") or ""
+                
+            plot_val = s.get("plot")
+            if not plot_val or plot_val in ("N/A", "None", ""):
+                s["plot"] = meta.get("plot") or s.get("plot") or ""
+                
+            poster_val = s.get("poster_url")
+            if not poster_val or poster_val in ("N/A", "None", ""):
+                s["poster_url"] = meta.get("poster_url") or s.get("poster_url") or ""
+                
+            # Double check all fields for standard formatting
+            for field in ["imdb_score", "rt_score", "plot", "poster_url", "year"]:
+                if s.get(field) is None or s.get(field) == "None":
+                    s[field] = "N/A" if "score" in field else ""
+                    
+        # Save the screenings locally as a JSON file
         output_dir = os.path.join(os.path.dirname(__file__), "..", "output")
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "screenings.json")
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(screenings, f, indent=2, ensure_ascii=False)
 
+        # 4. Save to Supabase
         supabase: Client = create_client(url, key)
         
         # Overwrite logic: delete existing screenings for the current cinema(s) in this batch
