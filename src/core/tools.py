@@ -444,7 +444,7 @@ def save_screenings_to_db(screenings: list) -> str:
                 s["plot"] = meta.get("plot") or s.get("plot") or ""
                 
             poster_val = s.get("poster_url")
-            if not poster_val or poster_val in ("N/A", "None", ""):
+            if not poster_val or poster_val in ("N/A", "None", "", "[Base64 Cached Image]"):
                 s["poster_url"] = meta.get("poster_url") or s.get("poster_url") or ""
                 
             # Double check all fields for standard formatting
@@ -452,12 +452,14 @@ def save_screenings_to_db(screenings: list) -> str:
                 if s.get(field) is None or s.get(field) == "None":
                     s[field] = "N/A" if "score" in field else ""
                     
-        # Save the screenings locally as a JSON file (keeping base64)
+        # Clean up local screenings.json since we only want to keep imdb_cache.json locally
         output_dir = os.path.join(os.path.dirname(__file__), "..", "output")
-        os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "screenings.json")
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(screenings, f, indent=2, ensure_ascii=False)
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
 
         # 4. Save to Supabase
         supabase: Client = create_client(url, key)
@@ -506,7 +508,7 @@ def save_screenings_to_db(screenings: list) -> str:
                     s["poster_url"] = "" # Strip base64 to prevent payload too large errors
         # Perform bulk insert into 'screenings' table
         response = supabase.table("screenings").insert(supabase_screenings).execute()
-        return f"Successfully saved {len(screenings)} screenings to the Supabase database and locally to src/output/screenings.json."
+        return f"Successfully saved {len(screenings)} screenings to the Supabase database."
     except Exception as e:
         return f"Error saving to database: {str(e)}"
 

@@ -118,15 +118,13 @@
                 // Group screenings by title + cinema (excluding past screenings in Tel Aviv time)
                 const groups = {};
                 
-                // Get current date/time in Tel Aviv timezone
-                const telAvivTimeString = new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"});
-                const nowTelAviv = new Date(telAvivTimeString);
+                // Get current date/time in Tel Aviv timezone using robust string comparison
+                const telAvivDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); 
+                const telAvivTimeStr = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(new Date());
 
                 screenings.forEach(screening => {
-                    const screeningTime = new Date(`${screening.date}T${screening.time}`);
-                    if (screeningTime < nowTelAviv) {
-                        return; // Skip screenings in the past
-                    }
+                    if (screening.date < telAvivDateStr) return; // Skip past days
+                    if (screening.date === telAvivDateStr && screening.time < telAvivTimeStr) return; // Skip past times today
                     
                     const key = `${screening.title}|||${screening.cinema}`;
                     if (!groups[key]) {
