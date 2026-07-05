@@ -399,8 +399,8 @@ def save_screenings_to_db(screenings: list) -> str:
             # Clean up specific titles and typos
             if "Miniions" in title:
                 title = title.replace("Miniions", "Minions")
-            if "Minions & Monsters" in title or "מיניונים ומפלצות" in title:
-                title = "Minions and Monsters"
+            if "Minions & Monsters" in title or "מיניונים ומפלצות" in title or "Minions and Monsters" in title:
+                title = "Minions & Monsters"
             s["title"] = title
             
             # Correct any year errors in the screening date (all current screenings are in 2026)
@@ -452,7 +452,7 @@ def save_screenings_to_db(screenings: list) -> str:
                 if s.get(field) is None or s.get(field) == "None":
                     s[field] = "N/A" if "score" in field else ""
                     
-        # Save the screenings locally as a JSON file
+        # Save the screenings locally as a JSON file (keeping base64)
         output_dir = os.path.join(os.path.dirname(__file__), "..", "output")
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "screenings.json")
@@ -467,8 +467,45 @@ def save_screenings_to_db(screenings: list) -> str:
         if cinemas:
             supabase.table("screenings").delete().in_("cinema", cinemas).execute()
             
+        # Create a copy for Supabase and upload base64 to Storage to avoid 1MB payload limits
+        import copy
+        import re
+        import base64
+        
+        def slugify(s_title):
+            return re.sub(r'[^a-z0-9]+', '-', s_title.lower()).strip('-')
+            
+        supabase_screenings = copy.deepcopy(screenings)
+        for s in supabase_screenings:
+            poster_val = s.get("poster_url", "")
+            if poster_val.startswith("data:image"):
+                try:
+                    header, encoded = poster_val.split(",", 1)
+                    ext = header.split(";")[0].split("/")[1] if "/" in header else "jpg"
+                    if ext == "jpeg": ext = "jpg"
+                    
+                    image_data = base64.b64decode(encoded)
+                    title_slug = slugify(s.get("title", "poster"))
+                    file_name = f"{title_slug}.{ext}"
+                    
+                    # Try to upload the file to Supabase storage
+                    try:
+                        supabase.storage.from_("posters").upload(
+                            file_name,
+                            image_data,
+                            {"content-type": f"image/{ext}"}
+                        )
+                    except Exception:
+                        pass # Likely already exists
+                        
+                    # Retrieve the public URL
+                    public_url = supabase.storage.from_("posters").get_public_url(file_name)
+                    s["poster_url"] = public_url
+                except Exception as e:
+                    print(f"Failed to upload poster for {s.get('title')}: {e}")
+                    s["poster_url"] = "" # Strip base64 to prevent payload too large errors
         # Perform bulk insert into 'screenings' table
-        response = supabase.table("screenings").insert(screenings).execute()
+        response = supabase.table("screenings").insert(supabase_screenings).execute()
         return f"Successfully saved {len(screenings)} screenings to the Supabase database and locally to src/output/screenings.json."
     except Exception as e:
         return f"Error saving to database: {str(e)}"

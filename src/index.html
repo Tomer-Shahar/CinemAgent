@@ -115,10 +115,12 @@
                 }
 
                 // Group screenings by title + cinema (excluding past screenings in Tel Aviv time)
+                // Group screenings by title + cinema (excluding past screenings in Tel Aviv time)
                 const groups = {};
                 
                 // Get current date/time in Tel Aviv timezone
-                const nowTelAviv = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
+                const telAvivTimeString = new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"});
+                const nowTelAviv = new Date(telAvivTimeString);
 
                 screenings.forEach(screening => {
                     const screeningTime = new Date(`${screening.date}T${screening.time}`);
@@ -140,11 +142,15 @@
                             showtimes: []
                         };
                     }
-                    groups[key].showtimes.push({
-                        date: screening.date,
-                        time: screening.time,
-                        ticket_url: screening.ticket_url
-                    });
+                    // Deduplicate showtimes by date and time
+                    const exists = groups[key].showtimes.some(st => st.date === screening.date && st.time === screening.time);
+                    if (!exists) {
+                        groups[key].showtimes.push({
+                            date: screening.date,
+                            time: screening.time,
+                            ticket_url: screening.ticket_url
+                        });
+                    }
                 });
 
                 // Sort groups by the date/time of their earliest upcoming showtime
@@ -208,14 +214,15 @@
                     scoresDiv.className = "flex items-center gap-3 mt-2 mb-3 text-xs";
 
                     // IMDb badge & link
-                    if (group.imdb_score && group.imdb_score !== 'N/A') {
+                    if (group.imdb_url) {
                         const imdbLink = document.createElement('a');
-                        imdbLink.href = group.imdb_url || '#';
+                        imdbLink.href = group.imdb_url;
                         imdbLink.target = "_blank";
                         imdbLink.className = "flex items-center gap-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded border border-yellow-500/20 transition-colors";
+                        const scoreText = (group.imdb_score && group.imdb_score !== 'N/A') ? group.imdb_score : 'Link';
                         imdbLink.innerHTML = `
                             <span class="font-black bg-yellow-500 text-black px-1 rounded-sm text-[10px]">IMDb</span>
-                            <span class="font-bold">${group.imdb_score}</span>
+                            <span class="font-bold">${scoreText}</span>
                         `;
                         scoresDiv.appendChild(imdbLink);
                     }
