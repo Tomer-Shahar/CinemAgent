@@ -118,9 +118,10 @@
                 // Group screenings by title + cinema (excluding past screenings in Tel Aviv time)
                 const groups = {};
                 
-                // Get current date/time in Tel Aviv timezone using robust string comparison
-                const telAvivDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); 
-                const telAvivTimeStr = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(new Date());
+                // Get current date/time in Tel Aviv timezone
+                const tzDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
+                const telAvivDateStr = `${tzDate.getFullYear()}-${String(tzDate.getMonth() + 1).padStart(2, '0')}-${String(tzDate.getDate()).padStart(2, '0')}`;
+                const telAvivTimeStr = `${String(tzDate.getHours()).padStart(2, '0')}:${String(tzDate.getMinutes()).padStart(2, '0')}`;
 
                 screenings.forEach(screening => {
                     if (screening.date < telAvivDateStr) return; // Skip past days
@@ -173,7 +174,7 @@
                     // 1. Poster
                     const posterContainer = document.createElement('div');
                     posterContainer.className = "w-32 h-48 sm:w-36 sm:h-52 flex-shrink-0 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-inner flex items-center justify-center";
-                    if (group.poster_url) {
+                    if (group.poster_url && group.poster_url !== "[Base64 Cached Image]") {
                         const img = document.createElement('img');
                         img.src = group.poster_url;
                         img.className = "w-full h-full object-cover";
