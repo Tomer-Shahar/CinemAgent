@@ -240,12 +240,35 @@
                     }
                     infoSection.appendChild(scoresDiv);
 
-                    // Plot Summary
                     if (group.plot) {
+                        const plotContainer = document.createElement('div');
+                        plotContainer.className = "mt-2 max-w-xl";
+
                         const plotP = document.createElement('p');
-                        plotP.className = "text-sm text-cinema-textMuted/90 mt-2 leading-relaxed max-w-xl";
+                        plotP.className = "text-sm text-cinema-textMuted/90 leading-relaxed line-clamp-3 transition-all duration-300";
                         plotP.textContent = group.plot;
-                        infoSection.appendChild(plotP);
+                        plotContainer.appendChild(plotP);
+
+                        if (group.plot.length > 150) {
+                            const expandBtn = document.createElement('button');
+                            expandBtn.className = "text-xs font-semibold text-cinema-accent hover:text-rose-400 mt-1 focus:outline-none transition-colors";
+                            expandBtn.textContent = "Read more";
+                            let isExpanded = false;
+                            
+                            expandBtn.onclick = () => {
+                                isExpanded = !isExpanded;
+                                if (isExpanded) {
+                                    plotP.classList.remove('line-clamp-3');
+                                    expandBtn.textContent = "Show less";
+                                } else {
+                                    plotP.classList.add('line-clamp-3');
+                                    expandBtn.textContent = "Read more";
+                                }
+                            };
+                            plotContainer.appendChild(expandBtn);
+                        }
+                        
+                        infoSection.appendChild(plotContainer);
                     }
 
                     // Meta Info (Cinema & Showtimes Select)
