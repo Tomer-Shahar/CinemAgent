@@ -193,9 +193,26 @@ def search_imdb_data(movie_titles, b64_posters=False) -> dict:
     for title in titles_to_query:
         try:
             data = None
+            imdb_id = None
+            
+            # --- TIER 0: Manual Overrides for known classic screenings ---
+            MANUAL_OVERRIDES = {
+                "Aladdin": "tt0103639" # 1992 animated version
+            }
+            if title in MANUAL_OVERRIDES:
+                imdb_id = MANUAL_OVERRIDES[title]
+                id_url = f"http://www.omdbapi.com/?apikey={api_key}&i={imdb_id}&plot=full"
+                try:
+                    response = requests.get(id_url, timeout=5)
+                    res_data = response.json()
+                    if res_data.get("Response") == "True":
+                        data = res_data
+                except Exception:
+                    pass
             
             # --- TIER 1: Try IMDb Autocomplete first (ranked by popularity/relevance) ---
-            imdb_id = search_imdb_autocomplete(title)
+            if not data or data.get("Response") != "True":
+                imdb_id = search_imdb_autocomplete(title)
             if imdb_id:
                 id_url = f"http://www.omdbapi.com/?apikey={api_key}&i={imdb_id}&plot=full"
                 try:
