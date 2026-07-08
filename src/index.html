@@ -123,34 +123,35 @@
                 const telAvivDateStr = `${tzDate.getFullYear()}-${String(tzDate.getMonth() + 1).padStart(2, '0')}-${String(tzDate.getDate()).padStart(2, '0')}`;
                 const telAvivTimeStr = `${String(tzDate.getHours()).padStart(2, '0')}:${String(tzDate.getMinutes()).padStart(2, '0')}`;
 
-                screenings.forEach(screening => {
-                    if (screening.date < telAvivDateStr) return; // Skip past days
-                    if (screening.date === telAvivDateStr && screening.time < telAvivTimeStr) return; // Skip past times today
-                    
-                    const key = `${screening.title}|||${screening.cinema}`;
-                    if (!groups[key]) {
-                        groups[key] = {
-                            title: screening.title,
-                            cinema: screening.cinema,
-                            year: screening.year,
-                            imdb_url: screening.imdb_url,
-                            imdb_score: screening.imdb_score,
-                            rt_score: screening.rt_score,
-                            poster_url: screening.poster_url,
-                            plot: screening.plot,
-                            showtimes: []
-                        };
-                    }
-                    // Deduplicate showtimes by date and time
-                    const exists = groups[key].showtimes.some(st => st.date === screening.date && st.time === screening.time);
-                    if (!exists) {
-                        groups[key].showtimes.push({
-                            date: screening.date,
-                            time: screening.time,
-                            ticket_url: screening.ticket_url
-                        });
-                    }
-                });
+                    screenings.forEach(screening => {
+                        if (screening.date < telAvivDateStr) return; // Skip past days
+                        if (screening.date === telAvivDateStr && screening.time < telAvivTimeStr) return; // Skip past times today
+                        
+                        const key = `${screening.title}|||${screening.cinema}|||${screening.date}`;
+                        if (!groups[key]) {
+                            groups[key] = {
+                                title: screening.title,
+                                cinema: screening.cinema,
+                                date: screening.date,
+                                year: screening.year,
+                                imdb_url: screening.imdb_url,
+                                imdb_score: screening.imdb_score,
+                                rt_score: screening.rt_score,
+                                poster_url: screening.poster_url,
+                                plot: screening.plot,
+                                showtimes: []
+                            };
+                        }
+                        // Deduplicate showtimes by time for the same date
+                        const exists = groups[key].showtimes.some(st => st.time === screening.time);
+                        if (!exists) {
+                            groups[key].showtimes.push({
+                                date: screening.date,
+                                time: screening.time,
+                                ticket_url: screening.ticket_url
+                            });
+                        }
+                    });
 
                 // Sort groups by the date/time of their earliest upcoming showtime
                 const sortedGroups = Object.values(groups).sort((a, b) => {
