@@ -144,7 +144,7 @@ def search_imdb_autocomplete(query: str) -> str:
         print(f"IMDb Autocomplete error for '{query}': {e}")
     return None
 
-def search_imdb_data(movie_titles, b64_posters=False) -> dict:
+def search_imdb_data(movie_titles: list[str], b64_posters: bool = False) -> dict:
     """Fetches movie metadata (IMDb url/score, RT score, Poster, Plot, Year) from OMDb API for movie titles."""
     import requests
     import os
@@ -393,8 +393,9 @@ def search_imdb_data(movie_titles, b64_posters=False) -> dict:
         return results_clean
     return results
 
-def save_screenings_to_db(screenings: list) -> str:
-    """Saves a list of movie screenings to the Supabase database, overwriting existing records.
+def save_screenings_to_db(screenings: list[dict]) -> str:
+    """Upserts all screenings into the Supabase 'screenings' table and uploads any base64 posters to storage.
+    Expects a list of dictionaries, where each dictionary represents a screening.
     Each screening dict can contain: 'title', 'date', 'time', 'cinema', 'year', 'ticket_url',
     and optionally 'plot', 'poster_url', etc.
     """

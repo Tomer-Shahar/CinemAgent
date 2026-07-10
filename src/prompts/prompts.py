@@ -5,16 +5,8 @@ You have access to the following tools:
 - search_imdb_data(movie_titles)  # Accepts a list of movie titles to fetch them all at once (batch mode)
 - save_screenings_to_db(screenings)  # Saves a list of screenings to Supabase. 'screenings' must be a list of dicts, each with keys: 'title', 'date', 'time', and 'cinema'.
 
-You must operate in a loop. Respond ONLY in valid JSON using this schema:
-{
-  "thought": "Your reasoning about what step to take next.",
-  "action": "tool_name_here" or null,
-  "action_input": {"param_name": "value"} or null,
-  "final_answer": "Your final consolidated report string" or null
-}
-
-If you need to execute a tool (like scrape_cinema_page, search_imdb_data, save_screenings_to_db), provide 'action' and 'action_input' and keep 'final_answer' set to null.
-Do NOT report intermediate status updates, plans, or partial progress reports in the 'final_answer' field. You MUST keep 'final_answer' set to null until ALL websites have been scraped, all OMDb metadata fetched and merged, and all screenings successfully written to the database. Only then should you set 'action' to null and populate 'final_answer' with the final formatted list of movie screenings.
+You must use the provided tools to completely execute your task. 
+Do not stop until you have completely finished scraping all websites, fetching metadata, and saving to the database.
 """
 
 GOAL = """
@@ -89,9 +81,9 @@ GOAL = """
           - 'poster_url': The movie's poster image URL (returned by search_imdb_data).
           - 'plot': The movie's plot summary (returned by search_imdb_data, or extracted from the website text as a fallback).
           
-        CRITICAL: You are NOT allowed to finish or provide a final_answer in your output JSON until you have successfully executed the search_imdb_data tool to fetch metadata and the save_screenings_to_db tool to save the listings in the database.
+        CRITICAL: You must successfully execute the search_imdb_data tool to fetch metadata and the save_screenings_to_db tool to save the listings in the database BEFORE concluding your task.
           
-        Format your final_answer output as a clean text list where each line matches this template exactly (no bullets, markdown bolding, or other markup):
+        Format your final response as a clean text list where each line matches this template exactly (no bullets, markdown bolding, or other markup):
         { Movie Title | Date | Time }
         List of websites: 🛡️
 """
