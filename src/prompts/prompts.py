@@ -45,6 +45,13 @@ GOAL = """
            - Extract the movie titles. They have both Hebrew and English names (e.g. `עולמו של ווין בשיתוף דיגידוג | Wayne's World`). Use the English title (e.g. `Wayne's World`) for search_imdb_data and the database record, unless it is a local Israeli movie.
            - **Plot Summary Guideline**: You MUST NOT use the website's description or text as the movie's 'plot' for גן הפסגה. The 'plot' MUST come from OMDb/IMDb metadata (via search_imdb_data).
              
+        4. City Hall Roof (גג בניין העירייה):
+           - The cinema name MUST strictly be 'גג בניין העירייה'.
+           - The text contains a "מועדים" (Dates) section with dates and times for each movie (e.g., `גשם סגול - פרינס ביום שני, 03.08.2026 20:00`), and a "פרטים נוספים" (Details) section with the movie names in Hebrew and English (e.g., `גשם סגול | Purple Rain`).
+           - You MUST correlate the dates from the Dates section with the details in the Details section to create the full listing.
+           - Use the English title (e.g. `Purple Rain`) for the movie name and IMDB search.
+           - The 'ticket_url' MUST be extracted from the "קישור להזמנות" (Reservations Link) JSON field in the scraped text (e.g., `https://www.cinema.co.il/series/...`), and you must use this identical URL for all movies in this venue.
+             
         Hebrew vs. English Naming and Querying Rules:
         - For any movie on Jaffa Cinema or Tel-Aviv Cinematheque, if the homepage title contains BOTH Hebrew and English (separated by `|`), you MUST NOT scrape its detail page. Use the English portion (e.g., `The Ties That Bind Us` from `מה שמחבר בינינו | The Ties That Bind Us`) directly.
         - You MUST only scrape the event detail page URL if the title is purely in Hebrew with no English translation provided on the homepage.

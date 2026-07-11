@@ -29,7 +29,7 @@ def scrape_cinema_page(url: str) -> str:
                     caption = f.get("Caption", "")
                     val = f.get("Value", "")
                     if val:
-                        val_cleaned = BeautifulSoup(str(val), 'html.parser').get_text().strip()
+                        val_cleaned = BeautifulSoup(str(val), 'html.parser').get_text(separator='\n').strip()
                         text_parts.append(f"{caption}: {val_cleaned}")
                 return "\n".join(text_parts)
         except Exception as e:
