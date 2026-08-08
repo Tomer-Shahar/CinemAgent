@@ -190,7 +190,24 @@ def search_imdb_data(movie_titles: list[str], b64_posters: bool = False) -> dict
             }
         return results
         
+    def is_hebrew(text: str) -> bool:
+        hebrew_chars = [c for c in text if 1424 <= ord(c) <= 1514]
+        alpha_chars = [c for c in text if c.isalpha()]
+        if not alpha_chars: return False
+        return len(hebrew_chars) / len(alpha_chars) > 0.5
+
     for title in titles_to_query:
+        if is_hebrew(title):
+            results[title] = {
+                "imdb_url": f"https://www.imdb.com/find?q={urllib.parse.quote(title)}",
+                "imdb_score": "N/A",
+                "rt_score": "N/A",
+                "poster_url": "",
+                "plot": "",
+                "year": ""
+            }
+            continue
+            
         try:
             data = None
             imdb_id = None
