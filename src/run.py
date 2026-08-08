@@ -41,3 +41,21 @@ if __name__ == "__main__":
         print(f"\n--- Final Agent Response for {website} ---")
         print(final_answer)
         print("\n" + "="*50 + "\n")
+        
+    print("Cleaning up past screenings from the database...")
+    try:
+        from supabase import create_client
+        from dotenv import load_dotenv
+        import datetime
+        
+        load_dotenv()
+        url = os.environ.get("SUPABASE_PROJECT_URL")
+        key = os.environ.get("SUPABASE_KEY")
+        
+        if url and key:
+            sb = create_client(url, key)
+            today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+            sb.table("screenings").delete().lt("date", today_str).execute()
+            print(f"Cleanup complete. Deleted old screenings before {today_str}.")
+    except Exception as e:
+        print(f"Cleanup failed: {e}")
