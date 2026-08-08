@@ -26,22 +26,28 @@ if __name__ == "__main__":
         print(f"--- Starting agent loop for {website} ---")
         goal = GOAL + '\n' + str([website])
         
-        # Retry loop to handle 503 Unavailable and None responses
+        # Retry loop to handle API rate limits and connection errors
         max_retries = 5
         for attempt in range(max_retries):
             final_answer = run_agent_loop(goal)
             
-            if final_answer and "Error: 503" not in str(final_answer):
+            if final_answer and "Error:" not in str(final_answer):
                 break
                 
-            print(f"Attempt {attempt + 1} failed for {website}. Retrying in 15 seconds...")
+            print(f"Attempt {attempt + 1} failed for {website}. Retrying in 60 seconds...")
             import time
-            time.sleep(15)
+            time.sleep(60)
         
         print(f"\n--- Final Agent Response for {website} ---")
         print(final_answer)
         print("\n" + "="*50 + "\n")
         
+        # Add a delay between websites to prevent rate limiting
+        if website != websites[-1]:
+            print("Waiting 60 seconds before processing the next website to avoid API rate limits...")
+            import time
+            time.sleep(60)
+                    
     print("Cleaning up past screenings from the database...")
     try:
         from supabase import create_client
