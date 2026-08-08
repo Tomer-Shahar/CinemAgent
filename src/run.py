@@ -22,10 +22,22 @@ if __name__ == "__main__":
         
     print(f"Loaded {len(websites)} website(s) to scrape: {websites}\n")
     
-    # Construct the goal referencing the websites and formatting rules
-    goal = GOAL + '\n' + str(websites)
-    print("Starting agent loop...")
-    final_answer = run_agent_loop(goal)
-    
-    print("\n--- Final Agent Response ---")
-    print(final_answer)
+    for website in websites:
+        print(f"--- Starting agent loop for {website} ---")
+        goal = GOAL + '\n' + str([website])
+        
+        # Retry loop to handle 503 Unavailable and None responses
+        max_retries = 5
+        for attempt in range(max_retries):
+            final_answer = run_agent_loop(goal)
+            
+            if final_answer and "Error: 503" not in str(final_answer):
+                break
+                
+            print(f"Attempt {attempt + 1} failed for {website}. Retrying in 15 seconds...")
+            import time
+            time.sleep(15)
+        
+        print(f"\n--- Final Agent Response for {website} ---")
+        print(final_answer)
+        print("\n" + "="*50 + "\n")

@@ -525,8 +525,14 @@ def save_screenings_to_db(screenings: list[dict]) -> str:
                     print(f"Failed to upload poster for {s.get('title')}: {e}")
                     s["poster_url"] = "" # Strip base64 to prevent payload too large errors
         # Perform bulk insert into 'screenings' table
-        response = supabase.table("screenings").insert(supabase_screenings).execute()
-        return f"Successfully saved {len(screenings)} screenings to the Supabase database."
+        try:
+            res = supabase.table("screenings").insert(supabase_screenings).execute()
+            print(f"SUCCESS: Saved {len(res.data)} screenings to the DB.")
+            return f"Successfully saved {len(res.data)} screenings to the database!"
+        except Exception as e:
+            error_msg = f"DB Insert Error: {e}"
+            print(error_msg)
+            return error_msg
     except Exception as e:
         return f"Error saving to database: {str(e)}"
 

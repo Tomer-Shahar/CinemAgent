@@ -50,7 +50,7 @@ GOAL = """
            - The text contains a "מועדים" (Dates) section with dates and times for each movie (e.g., `גשם סגול - פרינס ביום שני, 03.08.2026 20:00`), and a "פרטים נוספים" (Details) section with the movie names in Hebrew and English (e.g., `גשם סגול | Purple Rain`).
            - You MUST correlate the dates from the Dates section with the details in the Details section to create the full listing.
            - Use the English title (e.g. `Purple Rain`) for the movie name and IMDB search.
-           - The 'ticket_url' MUST be extracted from the "קישור להזמנות" (Reservations Link) JSON field in the scraped text (e.g., `https://www.cinema.co.il/series/...`), and you must use this identical URL for all movies in this venue.
+           - The 'ticket_url' MUST ALWAYS be exactly: `https://www.tel-aviv.gov.il/Pages/MainItemPage.aspx?WebID=3af57d92-807c-43c5-8d5f-6fd455eb2776&ListID=9dd2da03-5c43-462a-b5b2-d087c179b16c&ItemID=13999`. Do NOT use any other URL for movies in this venue.
              
         Hebrew vs. English Naming and Querying Rules:
         - For any movie on Jaffa Cinema or Tel-Aviv Cinematheque, if the homepage title contains BOTH Hebrew and English (separated by `|`), you MUST NOT scrape its detail page. Use the English portion (e.g., `The Ties That Bind Us` from `מה שמחבר בינינו | The Ties That Bind Us`) directly.
