@@ -21,3 +21,6 @@ Thumbs.db
 
 # Local Backups
 src/output/*.json
+
+# Scratch workspace
+scratch/
