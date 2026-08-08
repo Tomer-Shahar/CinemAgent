@@ -57,11 +57,11 @@ GOAL = """
         - You MUST only scrape the event detail page URL if the title is purely in Hebrew with no English translation provided on the homepage.
         - You MUST check the scraped cinema website text (both Jaffa Cinema and Tel-Aviv Cinematheque) for any English titles/translations listed in the details or event descriptions (e.g. "Cologne 75" or "Minions & Monsters" or "Minions and Monsters" or "The Ties That Bind Us").
         - If an English title/name is mentioned on the cinema website for the movie, you MUST use that English title to query OMDb/IMDb (via search_imdb_data) and store it in the database (since this ensures accurate matching). E.g. for `קלן 75` use the English name `Cologne 75` or `Köln 75` if present on the page; for `מיניונים ומפלצות` use `Minions & Monsters` or `Minions and Monsters`.
-        - Only if there is no English title/name mentioned on the website AND the movie is Israeli (locally produced Hebrew movie), you should keep the title in Hebrew. Example: `מציצים` or `האחד והיחיד שלי`.
-        - For foreign/international films, if no English title is found on the website (even after checking the detail page), translate the Hebrew title to English before querying OMDb (or use the English title returned by OMDb search).
+        - If a title is in Hebrew and no English title is provided on the website, DO NOT translate it yourself to English. Keep the title exactly as it appears in Hebrew. The ONLY exception is if you are 100% certain it is a famous international film (e.g. "הסנדק" -> "The Godfather").
 
         Grounding Rules:
         - DO NOT hallucinate or rely on your pre-trained knowledge about these websites or their historical schedules.
+        - NEVER hallucinate or guess URLs. The 'ticket_url' MUST be extracted exactly from the provided markdown links `[text](url)` in the scraped text.
         - You MUST extract movie listings ONLY from the actual raw text returned by the scrape_cinema_page tool during this execution. If a movie is not explicitly listed in the tool's text output, do not include it.
         
         Remove all duplicate screenings.
