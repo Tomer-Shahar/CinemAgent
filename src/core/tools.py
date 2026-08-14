@@ -87,19 +87,33 @@ def scrape_cinema_page(url: str) -> str:
         script.extract()
         
     # Replace link tags with [text](href) to preserve ticket links for the agent
-    from urllib.parse import urljoin
+    from urllib.parse import urljoin, unquote
     for a in soup.find_all('a', href=True):
         link_text = a.get_text().strip()
         link_url = a['href']
         # Resolve relative URLs
         if link_url.startswith('/') or not link_url.startswith('http'):
             link_url = urljoin(url, link_url)
+        # Unquote URL so it is clean, human-readable Hebrew characters (e.g. /event/האישה-שלא-ידעה-לאהוב-נבחרי-דוקאביב/)
+        link_url = unquote(link_url)
         a.replace_with(f" [{link_text}]({link_url}) ")
         
     # Replace image tags with ![alt](src) to preserve movie posters for fallback
-    for img in soup.find_all('img', src=True):
+    for img in soup.find_all('img'):
         alt_text = img.get('alt', '').strip() or 'Poster'
-        img_url = img['src']
+        # Check lazy-loading data attributes first (common on WordPress / Cinematheque sites)
+        img_url = (
+            img.get('data-src') or 
+            img.get('data-lazy-src') or 
+            img.get('data-original') or 
+            img.get('src') or 
+            ''
+        ).strip()
+        
+        # Skip 1x1 placeholder base64 gifs or empty URLs
+        if not img_url or img_url.startswith('data:image/gif') or img_url == 'data:,':
+            continue
+            
         if img_url.startswith('/') or not img_url.startswith('http'):
             img_url = urljoin(url, img_url)
         img.replace_with(f" ![{alt_text}]({img_url}) ")
@@ -114,10 +128,12 @@ def scrape_cinema_page(url: str) -> str:
         return cleaned_text[:6000]
     return cleaned_text[:20000]
 
-def search_imdb_autocomplete(query: str) -> str:
+def search_imdb_autocomplete(query: str, release_year: str = None) -> str:
     """Queries the IMDb public autocomplete suggestion endpoint and returns the best matching imdbID."""
     import requests
     import urllib.parse
+    import re
+    import difflib
     
     try:
         # Clean query: alphanumeric and spaces only
@@ -132,14 +148,46 @@ def search_imdb_autocomplete(query: str) -> str:
         if response.status_code == 200:
             data = response.json()
             results = data.get("d", [])
-            if results:
-                # Prioritize movies (qid == 'movie' or 'feature')
-                for item in results:
-                    qid = item.get("qid", "")
-                    if qid in ("movie", "feature"):
+            if not results:
+                return None
+                
+            def normalize_title(t):
+                return re.sub(r'[^a-z0-9]', '', str(t).lower())
+                
+            norm_query = normalize_title(query)
+            
+            # 1. Exact normalized title match
+            exact_matches = []
+            for item in results:
+                title_cand = item.get("l", "")
+                if normalize_title(title_cand) == norm_query:
+                    exact_matches.append(item)
+                    
+            if exact_matches:
+                if release_year:
+                    for item in exact_matches:
+                        if str(item.get("y", "")) == str(release_year):
+                            return item.get("id")
+                for item in exact_matches:
+                    if item.get("qid") in ("movie", "feature"):
                         return item.get("id")
-                # Fallback to the first result of any type
-                return results[0].get("id")
+                return exact_matches[0].get("id")
+                
+            # 2. Sequence similarity match
+            best_id = None
+            best_score = -1.0
+            for item in results:
+                title_cand = item.get("l", "")
+                ratio = difflib.SequenceMatcher(None, norm_query, normalize_title(title_cand)).ratio()
+                if item.get("qid") in ("movie", "feature"):
+                    ratio += 0.05
+                if release_year and str(item.get("y", "")) == str(release_year):
+                    ratio += 0.1
+                if ratio > best_score:
+                    best_score = ratio
+                    best_id = item.get("id")
+                    
+            return best_id
     except Exception as e:
         print(f"IMDb Autocomplete error for '{query}': {e}")
     return None
@@ -321,25 +369,39 @@ def search_imdb_data(movie_titles: list[str], b64_posters: bool = False) -> dict
                         response = requests.get(url, timeout=5)
                         if response.status_code == 200:
                             suggestions = response.json().get("d", [])
-                            match = None
-                            for item in suggestions:
-                                if item.get("qid") in ("movie", "feature"):
-                                    match = item
-                                    break
-                            if not match and suggestions:
-                                match = suggestions[0]
-                            if match:
-                                imdb_id = match.get("id")
-                                data = {
-                                    "Response": "True",
-                                    "Title": match.get("l"),
-                                    "Year": str(match.get("y", "")),
-                                    "imdbRating": "N/A",
-                                    "imdbID": imdb_id,
-                                    "Genre": "",
-                                    "Plot": "",
-                                    "Poster": match.get("i", {}).get("imageUrl", "") if match.get("i") else ""
-                                }
+                            if suggestions:
+                                import difflib
+                                norm_query = re.sub(r'[^a-z0-9]', '', title.lower())
+                                exact_match = None
+                                best_match = None
+                                best_score = -1.0
+                                
+                                for item in suggestions:
+                                    title_cand = item.get("l", "")
+                                    norm_cand = re.sub(r'[^a-z0-9]', '', title_cand.lower())
+                                    if norm_cand == norm_query:
+                                        exact_match = item
+                                        break
+                                    ratio = difflib.SequenceMatcher(None, norm_query, norm_cand).ratio()
+                                    if item.get("qid") in ("movie", "feature"):
+                                        ratio += 0.05
+                                    if ratio > best_score:
+                                        best_score = ratio
+                                        best_match = item
+                                        
+                                match = exact_match or best_match or suggestions[0]
+                                if match:
+                                    imdb_id = match.get("id")
+                                    data = {
+                                        "Response": "True",
+                                        "Title": match.get("l"),
+                                        "Year": str(match.get("y", "")),
+                                        "imdbRating": "N/A",
+                                        "imdbID": imdb_id,
+                                        "Genre": "",
+                                        "Plot": "",
+                                        "Poster": match.get("i", {}).get("imageUrl", "") if match.get("i") else ""
+                                    }
                 except Exception:
                     pass
             
@@ -409,6 +471,88 @@ def search_imdb_data(movie_titles: list[str], b64_posters: bool = False) -> dict
                 meta["poster_url"] = "[Base64 Cached Image]"
         return results_clean
     return results
+
+VALID_CINEMA_EVENT_URLS = set()
+
+def get_valid_cinematheque_urls():
+    """Fetches and caches all genuine event URLs from cinema.co.il."""
+    global VALID_CINEMA_EVENT_URLS
+    if not VALID_CINEMA_EVENT_URLS:
+        try:
+            import requests
+            import urllib.parse
+            from bs4 import BeautifulSoup
+            r = requests.get('https://www.cinema.co.il/', headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+            if r.status_code == 200:
+                soup = BeautifulSoup(r.text, 'html.parser')
+                for a in soup.find_all('a', href=True):
+                    href = a['href']
+                    if '/event/' in href:
+                        VALID_CINEMA_EVENT_URLS.add(urllib.parse.unquote(href))
+        except Exception as e:
+            print(f"Error fetching Cinematheque URLs: {e}")
+    return VALID_CINEMA_EVENT_URLS
+
+def qa_and_validate_links(screenings: list[dict]):
+    """Performs automated parallel link and image QA for each screening to ensure all URLs actually work."""
+    import requests
+    import urllib.parse
+    import difflib
+    import concurrent.futures
+    
+    headers = {"User-Agent": "Mozilla/5.0"}
+    
+    def process_single_screening(s):
+        # 1. QA Ticket URL
+        raw_t_url = s.get("ticket_url", "")
+        if raw_t_url and raw_t_url.startswith("http"):
+            t_url = urllib.parse.unquote(raw_t_url)
+            s["ticket_url"] = t_url
+            
+            try:
+                r = requests.head(t_url, headers=headers, timeout=3, allow_redirects=True)
+                if r.status_code >= 400:
+                    r = requests.get(t_url, headers=headers, timeout=3, stream=True)
+                
+                # If Cinematheque URL failed, attempt fixing encoding or slug via fuzzy match against site
+                if r.status_code >= 400 and "cinema.co.il" in t_url:
+                    valid_urls = get_valid_cinematheque_urls()
+                    if valid_urls:
+                        matches = difflib.get_close_matches(t_url, list(valid_urls), n=1, cutoff=0.5)
+                        if matches:
+                            s["ticket_url"] = matches[0]
+                            print(f"[QA FIXED] ticket_url for {s.get('title')}: {matches[0]}")
+            except Exception as e:
+                print(f"[QA WARNING] ticket_url check for {s.get('title')}: {e}")
+
+        # 2. QA Poster URL
+        p_url = s.get("poster_url", "")
+        if p_url and p_url.startswith("http"):
+            lower_p = p_url.lower()
+            # Immediately catch web pages incorrectly saved as poster_url
+            if "/event/" in lower_p or "/pages/" in lower_p or ".aspx" in lower_p or "cintlv.pres.global" in lower_p:
+                print(f"[QA STRIPPED] poster_url was webpage HTML for {s.get('title')}: {p_url}")
+                s["poster_url"] = ""
+                return
+                
+            try:
+                r = requests.head(p_url, headers=headers, timeout=3, allow_redirects=True)
+                if r.status_code >= 400:
+                    r = requests.get(p_url, headers=headers, timeout=3, stream=True)
+                
+                if r.status_code >= 400:
+                    print(f"[QA STRIPPED] poster_url returned {r.status_code} for {s.get('title')}: {p_url}")
+                    s["poster_url"] = ""
+                else:
+                    ct = r.headers.get("Content-Type", "").lower()
+                    if "text/html" in ct and not any(lower_p.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                        print(f"[QA STRIPPED] poster_url returned HTML content-type for {s.get('title')}: {p_url}")
+                        s["poster_url"] = ""
+            except Exception as e:
+                print(f"[QA WARNING] poster_url check for {s.get('title')}: {e}")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+        list(executor.map(process_single_screening, screenings))
 
 def save_screenings_to_db(screenings: list[dict]) -> str:
     """Upserts all screenings into the Supabase 'screenings' table and uploads any base64 posters to storage.
@@ -486,6 +630,10 @@ def save_screenings_to_db(screenings: list[dict]) -> str:
             for field in ["imdb_score", "rt_score", "plot", "poster_url", "year"]:
                 if s.get(field) is None or s.get(field) == "None":
                     s[field] = "N/A" if "score" in field else ""
+
+        # 4. QA and validate ticket and poster URLs
+        print(f"Running automated link and poster QA on {len(screenings)} screenings...")
+        qa_and_validate_links(screenings)
                     
         # Clean up local screenings.json since we only want to keep imdb_cache.json locally
         output_dir = os.path.join(os.path.dirname(__file__), "..", "output")
@@ -496,7 +644,7 @@ def save_screenings_to_db(screenings: list[dict]) -> str:
             except Exception:
                 pass
 
-        # 4. Save to Supabase
+        # 5. Save to Supabase
         supabase: Client = create_client(url, key)
         
         # Overwrite logic: delete existing screenings for the current cinema(s) in this batch

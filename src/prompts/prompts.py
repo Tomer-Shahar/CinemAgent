@@ -61,7 +61,7 @@ GOAL = """
 
         Grounding Rules:
         - DO NOT hallucinate or rely on your pre-trained knowledge about these websites or their historical schedules.
-        - NEVER hallucinate or guess URLs. The 'ticket_url' MUST be extracted exactly from the provided markdown links `[text](url)` in the scraped text.
+        - NEVER hallucinate, modify, or guess URLs. The 'ticket_url' MUST be copied verbatim from the provided markdown links `[text](url)` in the scraped text without altering or swapping any letters.
         - You MUST extract movie listings ONLY from the actual raw text returned by the scrape_cinema_page tool during this execution. If a movie is not explicitly listed in the tool's text output, do not include it.
         
         Remove all duplicate screenings.
@@ -72,7 +72,7 @@ GOAL = """
         3. Fallback logic:
            - **Year Fallback**: If the release year of the movie was NOT extracted from the website title/link/details, you MUST use the year returned by search_imdb_data (under the 'year' key).
            - **Plot Fallback**: If OMDb/IMDb returns no plot summary (e.g., empty or 'N/A') for a Jaffa Cinema or Tel-Aviv Cinematheque screening, you MUST use the description/synopsis extracted from the scraped website text as the 'plot' (translated to English if it is in Hebrew, unless it is a local Israeli movie). Do not leave the plot empty or 'N/A' if a description is present on the website!
-           - **Poster Image**: You MUST ALWAYS extract the movie's image/thumbnail/poster URL from the scraped website text and save that URL under the 'poster_url' key in the database object. In the scraped text, images are formatted as markdown `![alt](image_url)` (e.g. the thumbnail image from the cinema.co.il sliding div or the schedule poster from Jaffa Cinema). Match the image to the corresponding movie listing and extract it. DO NOT leave this empty!
+           - **Poster Image**: Use the poster image URL returned by search_imdb_data, or from scraped markdown images `![alt](image_url)`. NEVER set 'poster_url' to a webpage URL (e.g. `https://cinema.co.il/event/...`). If no image URL is found, leave it empty.
         4. You MUST save all unique screenings to the Supabase database using the save_screenings_to_db tool.
         
         The object list passed to save_screenings_to_db must consist of dicts with these keys:

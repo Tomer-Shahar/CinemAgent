@@ -43,13 +43,28 @@
 <body class="min-h-screen py-12 px-4 md:px-8">
     <div class="max-w-4xl mx-auto">
         <!-- Header -->
-        <header class="text-center mb-12">
+        <header class="text-center mb-10">
             <span class="text-xs uppercase tracking-widest text-cinema-accent font-semibold">Live Schedule</span>
             <h1 class="serif-title text-4xl md:text-5xl font-bold mt-2 mb-4 tracking-tight">Tel Aviv Cinema Guide</h1>
             <p class="text-cinema-textMuted max-w-md mx-auto text-sm md:text-base">
                 Curated screenings from independent theaters across Tel Aviv, updated live.
             </p>
         </header>
+
+        <!-- Cinema Venue Filter Dropdown -->
+        <div id="filter-container" class="hidden mb-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <label for="venue-select" class="text-sm font-semibold text-cinema-textMuted flex items-center gap-2">
+                <svg class="w-4 h-4 text-cinema-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Select Venue:
+            </label>
+            <div class="relative w-full sm:w-auto min-w-[260px]">
+                <select id="venue-select" class="w-full appearance-none bg-cinema-card border border-gray-700/80 hover:border-cinema-accent/50 text-gray-100 text-sm font-semibold rounded-xl pl-4 pr-10 py-2.5 focus:outline-none focus:border-cinema-accent focus:ring-1 focus:ring-cinema-accent/30 cursor-pointer shadow-lg shadow-black/20 transition-all duration-200">
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-cinema-textMuted">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+            </div>
+        </div>
 
         <!-- Loading State -->
         <div id="loading" class="flex flex-col items-center justify-center py-20">
@@ -81,6 +96,9 @@
         // Initialize Supabase Client
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+        let allSortedGroups = [];
+        let currentFilter = 'all';
+
         function formatDate(dateStr) {
             try {
                 const options = { weekday: 'short', month: 'short', day: 'numeric' };
@@ -91,9 +109,267 @@
             }
         }
 
+        function renderVenueFilters(groups) {
+            const filterContainer = document.getElementById('filter-container');
+            const selectEl = document.getElementById('venue-select');
+            selectEl.innerHTML = '';
+
+            // Extract unique venues with counts
+            const venueCounts = {};
+            groups.forEach(g => {
+                const venue = g.cinema || 'Other';
+                venueCounts[venue] = (venueCounts[venue] || 0) + 1;
+            });
+
+            const uniqueVenues = Object.keys(venueCounts);
+            if (uniqueVenues.length <= 1) {
+                filterContainer.classList.add('hidden');
+                return;
+            }
+
+            filterContainer.classList.remove('hidden');
+
+            // 'All Venues' option
+            const allOpt = document.createElement('option');
+            allOpt.value = 'all';
+            allOpt.textContent = `All Venues (${groups.length})`;
+            allOpt.selected = (currentFilter === 'all');
+            selectEl.appendChild(allOpt);
+
+            // Per-venue options
+            uniqueVenues.forEach(venue => {
+                const opt = document.createElement('option');
+                opt.value = venue;
+                opt.textContent = `${venue} (${venueCounts[venue]})`;
+                opt.selected = (currentFilter === venue);
+                selectEl.appendChild(opt);
+            });
+
+            selectEl.onchange = (e) => {
+                currentFilter = e.target.value;
+                renderCards();
+            };
+        }
+
+        function renderCards() {
+            const containerEl = document.getElementById('movies-container');
+            const emptyEl = document.getElementById('empty-state');
+
+            const filteredGroups = currentFilter === 'all'
+                ? allSortedGroups
+                : allSortedGroups.filter(g => g.cinema === currentFilter);
+
+            if (filteredGroups.length === 0) {
+                containerEl.innerHTML = '';
+                containerEl.classList.add('hidden');
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+
+            emptyEl.classList.add('hidden');
+            containerEl.innerHTML = '';
+
+            filteredGroups.forEach(group => {
+                const card = document.createElement('div');
+                card.className = "bg-cinema-card border border-gray-800/40 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-cinema-accent/30 hover:shadow-lg hover:shadow-cinema-accent/5 flex flex-col sm:flex-row items-start gap-5";
+
+                // 1. Poster
+                const posterContainer = document.createElement('div');
+                posterContainer.className = "w-32 h-48 sm:w-36 sm:h-52 flex-shrink-0 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-inner flex items-center justify-center";
+                
+                const img = document.createElement('img');
+                img.alt = group.title;
+                img.className = "w-full h-full object-cover";
+                
+                // Fallback to default robot poster on load error
+                img.onerror = () => {
+                    img.onerror = null;
+                    img.src = "./poster_not_found.png";
+                    img.className = "w-full h-full object-cover opacity-80";
+                    img.alt = "Poster Not Found";
+                };
+
+                if (group.poster_url && group.poster_url !== "[Base64 Cached Image]" && !group.poster_url.includes('/event/')) {
+                    img.src = group.poster_url;
+                } else {
+                    img.src = "./poster_not_found.png";
+                    img.className = "w-full h-full object-cover opacity-80";
+                    img.alt = "Poster Not Found";
+                }
+                posterContainer.appendChild(img);
+                card.appendChild(posterContainer);
+
+                // 2. Info Section
+                const infoSection = document.createElement('div');
+                infoSection.className = "flex-1 min-w-0";
+
+                // Title & Year
+                const titleHeader = document.createElement('div');
+                titleHeader.className = "flex items-baseline gap-2 flex-wrap mb-1.5";
+                
+                const titleSpan = document.createElement('h2');
+                titleSpan.className = "text-xl font-bold text-gray-100 tracking-tight";
+                titleSpan.textContent = group.title;
+                titleHeader.appendChild(titleSpan);
+
+                if (group.year) {
+                    const yearSpan = document.createElement('span');
+                    yearSpan.className = "text-xs font-semibold text-cinema-gold px-2 py-0.5 rounded bg-cinema-gold/10";
+                    yearSpan.textContent = group.year;
+                    titleHeader.appendChild(yearSpan);
+                }
+                infoSection.appendChild(titleHeader);
+
+                // Scores and links (IMDb / RT)
+                const scoresDiv = document.createElement('div');
+                scoresDiv.className = "flex items-center gap-3 mt-2 mb-3 text-xs";
+
+                // IMDb badge & link
+                if (group.imdb_url) {
+                    const imdbLink = document.createElement('a');
+                    imdbLink.href = group.imdb_url;
+                    imdbLink.target = "_blank";
+                    imdbLink.className = "flex items-center gap-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded border border-yellow-500/20 transition-colors";
+                    const scoreText = (group.imdb_score && group.imdb_score !== 'N/A') ? group.imdb_score : 'Link';
+                    imdbLink.innerHTML = `
+                        <span class="font-black bg-yellow-500 text-black px-1 rounded-sm text-[10px]">IMDb</span>
+                        <span class="font-bold">${scoreText}</span>
+                    `;
+                    scoresDiv.appendChild(imdbLink);
+                }
+
+                // Rotten Tomatoes badge
+                if (group.rt_score && group.rt_score !== 'N/A') {
+                    const rtLink = document.createElement('a');
+                    rtLink.href = `https://www.rottentomatoes.com/search?search=${encodeURIComponent(group.title)}`;
+                    rtLink.target = "_blank";
+                    rtLink.className = "flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 px-2 py-1 rounded border border-red-500/20 transition-colors";
+                    rtLink.innerHTML = `
+                        <span class="text-[12px]">🍅</span>
+                        <span class="font-bold">${group.rt_score}</span>
+                    `;
+                    scoresDiv.appendChild(rtLink);
+                }
+                infoSection.appendChild(scoresDiv);
+
+                if (group.plot) {
+                    const plotContainer = document.createElement('div');
+                    plotContainer.className = "mt-2 max-w-xl";
+
+                    const plotP = document.createElement('p');
+                    plotP.className = "text-sm text-cinema-textMuted/90 leading-relaxed line-clamp-3 transition-all duration-300";
+                    plotP.textContent = group.plot;
+                    plotContainer.appendChild(plotP);
+
+                    if (group.plot.length > 150) {
+                        const expandBtn = document.createElement('button');
+                        expandBtn.className = "text-xs font-semibold text-cinema-accent hover:text-rose-400 mt-1 focus:outline-none transition-colors cursor-pointer";
+                        expandBtn.textContent = "Read more";
+                        let isExpanded = false;
+                        
+                        expandBtn.onclick = () => {
+                            isExpanded = !isExpanded;
+                            if (isExpanded) {
+                                plotP.classList.remove('line-clamp-3');
+                                expandBtn.textContent = "Show less";
+                            } else {
+                                plotP.classList.add('line-clamp-3');
+                                expandBtn.textContent = "Read more";
+                            }
+                        };
+                        plotContainer.appendChild(expandBtn);
+                    }
+                    
+                    infoSection.appendChild(plotContainer);
+                }
+
+                // Meta Info (Cinema & Showtimes Select)
+                const metaDiv = document.createElement('div');
+                metaDiv.className = "flex flex-wrap items-center gap-x-4 gap-y-3 text-sm text-cinema-textMuted mt-4";
+
+                // Theater/Cinema badge
+                if (group.cinema) {
+                    const cinemaSpan = document.createElement('span');
+                    cinemaSpan.className = "flex items-center gap-1.5 text-gray-300 font-medium";
+                    cinemaSpan.innerHTML = `
+                        <svg class="w-4 h-4 text-cinema-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        ${group.cinema}
+                    `;
+                    metaDiv.appendChild(cinemaSpan);
+                }
+
+                // Showtimes Selector or Static Text
+                const selectContainer = document.createElement('div');
+                selectContainer.className = "flex items-center gap-2 pl-4 border-l border-gray-700/60";
+                
+                const selectLabel = document.createElement('label');
+                selectLabel.className = "text-xs font-semibold text-cinema-textMuted uppercase tracking-wider";
+                selectLabel.textContent = "Showtime:";
+                selectContainer.appendChild(selectLabel);
+
+                let selectEl;
+                if (group.showtimes.length > 1) {
+                    selectEl = document.createElement('select');
+                    selectEl.className = "bg-cinema-bg border border-gray-700 text-gray-200 rounded-lg px-2 py-1 text-sm font-medium focus:outline-none focus:border-cinema-accent/60 cursor-pointer";
+                    
+                    group.showtimes.forEach((st, idx) => {
+                        const opt = document.createElement('option');
+                        opt.value = idx;
+                        opt.textContent = `${formatDate(st.date)} @ ${st.time}`;
+                        selectEl.appendChild(opt);
+                    });
+                    selectContainer.appendChild(selectEl);
+                } else {
+                    const st = group.showtimes[0];
+                    const textSpan = document.createElement('span');
+                    textSpan.className = "text-gray-200 text-sm font-medium";
+                    textSpan.textContent = `${formatDate(st.date)} @ ${st.time}`;
+                    selectContainer.appendChild(textSpan);
+                }
+                metaDiv.appendChild(selectContainer);
+
+                infoSection.appendChild(metaDiv);
+                card.appendChild(infoSection);
+
+                // 3. Action Button (Tickets/Details)
+                const actionDiv = document.createElement('div');
+                actionDiv.className = "flex sm:flex-col justify-end w-full sm:w-auto self-stretch sm:self-center";
+                
+                const ticketBtn = document.createElement('a');
+                ticketBtn.target = "_blank";
+                ticketBtn.className = "w-full sm:w-auto text-center bg-cinema-accent hover:bg-rose-600 text-white font-semibold text-sm px-6 py-3 rounded-xl transition-colors duration-200 shadow-md shadow-cinema-accent/10 whitespace-nowrap cursor-pointer";
+                ticketBtn.textContent = "Details";
+
+                // Set initial ticket link and listener to update on selection change
+                const updateTicketLink = () => {
+                    const selectedShowtime = selectEl 
+                        ? group.showtimes[selectEl.value] 
+                        : group.showtimes[0];
+                    if (selectedShowtime && selectedShowtime.ticket_url) {
+                        ticketBtn.href = selectedShowtime.ticket_url;
+                        ticketBtn.classList.remove('opacity-50', 'pointer-events-none');
+                    } else {
+                        ticketBtn.removeAttribute('href');
+                        ticketBtn.classList.add('opacity-50', 'pointer-events-none');
+                    }
+                };
+                
+                if (selectEl) {
+                    selectEl.addEventListener('change', updateTicketLink);
+                }
+                updateTicketLink(); // Initial run
+
+                actionDiv.appendChild(ticketBtn);
+                card.appendChild(actionDiv);
+
+                containerEl.appendChild(card);
+            });
+
+            containerEl.classList.remove('hidden');
+        }
+
         async function fetchAndRenderScreenings() {
             const loadingEl = document.getElementById('loading');
-            const containerEl = document.getElementById('movies-container');
             const errorEl = document.getElementById('error-message');
             const emptyEl = document.getElementById('empty-state');
 
@@ -115,7 +391,6 @@
                 }
 
                 // Group screenings by title + cinema (excluding past screenings in Tel Aviv time)
-                // Group screenings by title + cinema (excluding past screenings in Tel Aviv time)
                 const groups = {};
                 
                 // Get current date/time in Tel Aviv timezone
@@ -123,240 +398,50 @@
                 const telAvivDateStr = `${tzDate.getFullYear()}-${String(tzDate.getMonth() + 1).padStart(2, '0')}-${String(tzDate.getDate()).padStart(2, '0')}`;
                 const telAvivTimeStr = `${String(tzDate.getHours()).padStart(2, '0')}:${String(tzDate.getMinutes()).padStart(2, '0')}`;
 
-                    screenings.forEach(screening => {
-                        if (screening.date < telAvivDateStr) return; // Skip past days
-                        if (screening.date === telAvivDateStr && screening.time < telAvivTimeStr) return; // Skip past times today
-                        
-                        const key = `${screening.title}|||${screening.cinema}|||${screening.date}`;
-                        if (!groups[key]) {
-                            groups[key] = {
-                                title: screening.title,
-                                cinema: screening.cinema,
-                                date: screening.date,
-                                year: screening.year,
-                                imdb_url: screening.imdb_url,
-                                imdb_score: screening.imdb_score,
-                                rt_score: screening.rt_score,
-                                poster_url: screening.poster_url,
-                                plot: screening.plot,
-                                showtimes: []
-                            };
-                        }
-                        // Deduplicate showtimes by time for the same date
-                        const exists = groups[key].showtimes.some(st => st.time === screening.time);
-                        if (!exists) {
-                            groups[key].showtimes.push({
-                                date: screening.date,
-                                time: screening.time,
-                                ticket_url: screening.ticket_url
-                            });
-                        }
-                    });
+                screenings.forEach(screening => {
+                    if (screening.date < telAvivDateStr) return; // Skip past days
+                    if (screening.date === telAvivDateStr && screening.time < telAvivTimeStr) return; // Skip past times today
+                    
+                    const key = `${screening.title}|||${screening.cinema}|||${screening.date}`;
+                    if (!groups[key]) {
+                        groups[key] = {
+                            title: screening.title,
+                            cinema: screening.cinema,
+                            date: screening.date,
+                            year: screening.year,
+                            imdb_url: screening.imdb_url,
+                            imdb_score: screening.imdb_score,
+                            rt_score: screening.rt_score,
+                            poster_url: screening.poster_url,
+                            plot: screening.plot,
+                            showtimes: []
+                        };
+                    }
+                    // Deduplicate showtimes by time for the same date
+                    const exists = groups[key].showtimes.some(st => st.time === screening.time);
+                    if (!exists) {
+                        groups[key].showtimes.push({
+                            date: screening.date,
+                            time: screening.time,
+                            ticket_url: screening.ticket_url
+                        });
+                    }
+                });
 
                 // Sort groups by the date/time of their earliest upcoming showtime
-                const sortedGroups = Object.values(groups).sort((a, b) => {
+                allSortedGroups = Object.values(groups).sort((a, b) => {
                     const dateA = new Date(`${a.showtimes[0].date}T${a.showtimes[0].time}`);
                     const dateB = new Date(`${b.showtimes[0].date}T${b.showtimes[0].time}`);
                     return dateA - dateB;
                 });
 
-                if (sortedGroups.length === 0) {
+                if (allSortedGroups.length === 0) {
                     emptyEl.classList.remove('hidden');
                     return;
                 }
-                emptyEl.classList.add('hidden');
 
-                // Render screenings
-                containerEl.innerHTML = '';
-                sortedGroups.forEach(group => {
-                    const card = document.createElement('div');
-                    card.className = "bg-cinema-card border border-gray-800/40 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-cinema-accent/30 hover:shadow-lg hover:shadow-cinema-accent/5 flex flex-col sm:flex-row items-start gap-5";
-
-                    // 1. Poster
-                    const posterContainer = document.createElement('div');
-                    posterContainer.className = "w-32 h-48 sm:w-36 sm:h-52 flex-shrink-0 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-inner flex items-center justify-center";
-                    if (group.poster_url && group.poster_url !== "[Base64 Cached Image]") {
-                        const img = document.createElement('img');
-                        img.src = group.poster_url;
-                        img.className = "w-full h-full object-cover";
-                        img.alt = group.title;
-                        posterContainer.appendChild(img);
-                    } else {
-                        const img = document.createElement('img');
-                        img.src = "./poster_not_found.png";
-                        img.className = "w-full h-full object-cover opacity-80";
-                        img.alt = "Poster Not Found";
-                        posterContainer.appendChild(img);
-                    }
-                    card.appendChild(posterContainer);
-
-                    // 2. Info Section
-                    const infoSection = document.createElement('div');
-                    infoSection.className = "flex-1 min-w-0";
-
-                    // Title & Year
-                    const titleHeader = document.createElement('div');
-                    titleHeader.className = "flex items-baseline gap-2 flex-wrap mb-1.5";
-                    
-                    const titleSpan = document.createElement('h2');
-                    titleSpan.className = "text-xl font-bold text-gray-100 tracking-tight";
-                    titleSpan.textContent = group.title;
-                    titleHeader.appendChild(titleSpan);
-
-                    if (group.year) {
-                        const yearSpan = document.createElement('span');
-                        yearSpan.className = "text-xs font-semibold text-cinema-gold px-2 py-0.5 rounded bg-cinema-gold/10";
-                        yearSpan.textContent = group.year;
-                        titleHeader.appendChild(yearSpan);
-                    }
-                    infoSection.appendChild(titleHeader);
-
-                    // Scores and links (IMDb / RT)
-                    const scoresDiv = document.createElement('div');
-                    scoresDiv.className = "flex items-center gap-3 mt-2 mb-3 text-xs";
-
-                    // IMDb badge & link
-                    if (group.imdb_url) {
-                        const imdbLink = document.createElement('a');
-                        imdbLink.href = group.imdb_url;
-                        imdbLink.target = "_blank";
-                        imdbLink.className = "flex items-center gap-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded border border-yellow-500/20 transition-colors";
-                        const scoreText = (group.imdb_score && group.imdb_score !== 'N/A') ? group.imdb_score : 'Link';
-                        imdbLink.innerHTML = `
-                            <span class="font-black bg-yellow-500 text-black px-1 rounded-sm text-[10px]">IMDb</span>
-                            <span class="font-bold">${scoreText}</span>
-                        `;
-                        scoresDiv.appendChild(imdbLink);
-                    }
-
-                    // Rotten Tomatoes badge
-                    if (group.rt_score && group.rt_score !== 'N/A') {
-                        const rtLink = document.createElement('a');
-                        rtLink.href = `https://www.rottentomatoes.com/search?search=${encodeURIComponent(group.title)}`;
-                        rtLink.target = "_blank";
-                        rtLink.className = "flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 px-2 py-1 rounded border border-red-500/20 transition-colors";
-                        rtLink.innerHTML = `
-                            <span class="text-[12px]">🍅</span>
-                            <span class="font-bold">${group.rt_score}</span>
-                        `;
-                        scoresDiv.appendChild(rtLink);
-                    }
-                    infoSection.appendChild(scoresDiv);
-
-                    if (group.plot) {
-                        const plotContainer = document.createElement('div');
-                        plotContainer.className = "mt-2 max-w-xl";
-
-                        const plotP = document.createElement('p');
-                        plotP.className = "text-sm text-cinema-textMuted/90 leading-relaxed line-clamp-3 transition-all duration-300";
-                        plotP.textContent = group.plot;
-                        plotContainer.appendChild(plotP);
-
-                        if (group.plot.length > 150) {
-                            const expandBtn = document.createElement('button');
-                            expandBtn.className = "text-xs font-semibold text-cinema-accent hover:text-rose-400 mt-1 focus:outline-none transition-colors";
-                            expandBtn.textContent = "Read more";
-                            let isExpanded = false;
-                            
-                            expandBtn.onclick = () => {
-                                isExpanded = !isExpanded;
-                                if (isExpanded) {
-                                    plotP.classList.remove('line-clamp-3');
-                                    expandBtn.textContent = "Show less";
-                                } else {
-                                    plotP.classList.add('line-clamp-3');
-                                    expandBtn.textContent = "Read more";
-                                }
-                            };
-                            plotContainer.appendChild(expandBtn);
-                        }
-                        
-                        infoSection.appendChild(plotContainer);
-                    }
-
-                    // Meta Info (Cinema & Showtimes Select)
-                    const metaDiv = document.createElement('div');
-                    metaDiv.className = "flex flex-wrap items-center gap-x-4 gap-y-3 text-sm text-cinema-textMuted mt-4";
-
-                    // Theater/Cinema badge
-                    if (group.cinema) {
-                        const cinemaSpan = document.createElement('span');
-                        cinemaSpan.className = "flex items-center gap-1.5 text-gray-300 font-medium";
-                        cinemaSpan.innerHTML = `
-                            <svg class="w-4 h-4 text-cinema-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                            ${group.cinema}
-                        `;
-                        metaDiv.appendChild(cinemaSpan);
-                    }
-
-                    // Showtimes Selector or Static Text
-                    const selectContainer = document.createElement('div');
-                    selectContainer.className = "flex items-center gap-2 pl-4 border-l border-gray-700/60";
-                    
-                    const selectLabel = document.createElement('label');
-                    selectLabel.className = "text-xs font-semibold text-cinema-textMuted uppercase tracking-wider";
-                    selectLabel.textContent = "Showtime:";
-                    selectContainer.appendChild(selectLabel);
-
-                    let selectEl;
-                    if (group.showtimes.length > 1) {
-                        selectEl = document.createElement('select');
-                        selectEl.className = "bg-cinema-bg border border-gray-700 text-gray-200 rounded-lg px-2 py-1 text-sm font-medium focus:outline-none focus:border-cinema-accent/60 cursor-pointer";
-                        
-                        group.showtimes.forEach((st, idx) => {
-                            const opt = document.createElement('option');
-                            opt.value = idx;
-                            opt.textContent = `${formatDate(st.date)} @ ${st.time}`;
-                            selectEl.appendChild(opt);
-                        });
-                        selectContainer.appendChild(selectEl);
-                    } else {
-                        const st = group.showtimes[0];
-                        const textSpan = document.createElement('span');
-                        textSpan.className = "text-gray-200 text-sm font-medium";
-                        textSpan.textContent = `${formatDate(st.date)} @ ${st.time}`;
-                        selectContainer.appendChild(textSpan);
-                    }
-                    metaDiv.appendChild(selectContainer);
-
-                    infoSection.appendChild(metaDiv);
-                    card.appendChild(infoSection);
-
-                    // 3. Action Button (Tickets/Details)
-                    const actionDiv = document.createElement('div');
-                    actionDiv.className = "flex sm:flex-col justify-end w-full sm:w-auto self-stretch sm:self-center";
-                    
-                    const ticketBtn = document.createElement('a');
-                    ticketBtn.target = "_blank";
-                    ticketBtn.className = "w-full sm:w-auto text-center bg-cinema-accent hover:bg-rose-600 text-white font-semibold text-sm px-6 py-3 rounded-xl transition-colors duration-200 shadow-md shadow-cinema-accent/10 whitespace-nowrap cursor-pointer";
-                    ticketBtn.textContent = "Details";
-
-                    // Set initial ticket link and listener to update on selection change
-                    const updateTicketLink = () => {
-                        const selectedShowtime = selectEl 
-                            ? group.showtimes[selectEl.value] 
-                            : group.showtimes[0];
-                        if (selectedShowtime && selectedShowtime.ticket_url) {
-                            ticketBtn.href = selectedShowtime.ticket_url;
-                            ticketBtn.classList.remove('opacity-50', 'pointer-events-none');
-                        } else {
-                            ticketBtn.removeAttribute('href');
-                            ticketBtn.classList.add('opacity-50', 'pointer-events-none');
-                        }
-                    };
-                    
-                    if (selectEl) {
-                        selectEl.addEventListener('change', updateTicketLink);
-                    }
-                    updateTicketLink(); // Initial run
-
-                    actionDiv.appendChild(ticketBtn);
-                    card.appendChild(actionDiv);
-
-                    containerEl.appendChild(card);
-                });
-
-                containerEl.classList.remove('hidden');
+                renderVenueFilters(allSortedGroups);
+                renderCards();
 
             } catch (err) {
                 console.error("Supabase fetch error:", err);

@@ -1,5 +1,6 @@
 import requests
 import difflib
+from src.core.tools import search_imdb_autocomplete
 
 
 def fetch_imdb_with_fuzzy_fallback(movie_title: str, api_key: str) -> dict:
