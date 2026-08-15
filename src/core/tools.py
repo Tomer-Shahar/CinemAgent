@@ -39,49 +39,59 @@ def scrape_cinema_page(url: str) -> str:
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # Extract only the movie slider boxes for the Cinemateque homepage to prevent context overflow
-    # Extract only the movie slider boxes for the Cinemateque homepage to prevent context overflow
+    # Extract and format movie slider boxes for Cinematheque homepage directly into clean structured cards
     if "cinema.co.il" in url and (url.rstrip('/').endswith("cinema.co.il") or "main" in url):
         slides = soup.find_all(class_="movie-slid")
         if slides:
-            import concurrent.futures
+            from urllib.parse import urljoin, unquote
+            screenings_md = []
             
-            def process_slide(slide):
-                try:
-                    a_tags = slide.find_all('a', href=True)
-                    event_url = None
-                    for tag in a_tags:
-                        href = tag['href']
-                        if "/event/" in href:
-                            event_url = href
-                            break
-                            
-                    if event_url:
-                        if not event_url.startswith('http'):
-                            event_url = urllib.parse.urljoin("https://www.cinema.co.il/", event_url)
-                        
-                        # Find Hebrew text elements specifically inside this slide
-                        for el in slide.find_all(text=True):
-                            heb_title = el.strip()
-                            # Check if contains Hebrew characters (range 1424-1514)
-                            if heb_title and len(heb_title) > 2 and any(1424 <= ord(c) <= 1514 for c in heb_title):
-                                if "לפרטים" in heb_title or "לרכישה" in heb_title or "/" in heb_title:
-                                    continue
-                                r = requests.get(event_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
-                                if r.status_code == 200:
-                                    sub_soup = BeautifulSoup(r.text, 'html.parser')
-                                    for text in sub_soup.stripped_strings:
-                                        if heb_title in text and "|" in text:
-                                            el.replace_with(text)
-                                            return
-                except Exception:
-                    pass
-            
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                list(executor.map(process_slide, slides))
+            for s in slides:
+                title_el = s.find(class_='title')
+                title = title_el.get_text().strip() if title_el else ''
                 
-            html_content = "".join([str(s) for s in slides])
-            soup = BeautifulSoup(html_content, 'html.parser')
+                date_el = s.find(class_='date')
+                date_text = date_el.get_text().strip() if date_el else ''
+                
+                # Skip VOD or empty date slides
+                if 'VOD' in title or 'אורך:' in date_text or not date_text or '/' not in date_text:
+                    continue
+                    
+                parts = [p.strip() for p in date_text.split('/') if p.strip()]
+                d_str = parts[0] if len(parts) > 0 else ''
+                t_str = parts[1] if len(parts) > 1 else ''
+                
+                # Extract event detail URL
+                event_url = ''
+                for a in s.find_all('a', href=True):
+                    if '/event/' in a['href']:
+                        event_url = unquote(urljoin("https://www.cinema.co.il/", a['href']))
+                        break
+                if not event_url and s.find('a', href=True):
+                    event_url = unquote(urljoin("https://www.cinema.co.il/", s.find('a', href=True)['href']))
+                    
+                # Extract image URL (handling lazy-loaded images)
+                img = s.find('img')
+                img_url = ''
+                if img:
+                    img_url = (img.get('data-src') or img.get('data-lazy-src') or img.get('data-original') or img.get('src') or '').strip()
+                    if img_url.startswith('data:image'):
+                        img_url = ''
+                    elif img_url.startswith('/'):
+                        img_url = urljoin("https://www.cinema.co.il/", img_url)
+                        
+                card_lines = [
+                    "### Movie Screening:",
+                    f"- Title: [{title}]({event_url})" if event_url else f"- Title: {title}",
+                    f"- Date: {d_str}",
+                    f"- Time: {t_str}",
+                    f"- Ticket/Event URL: {event_url}" if event_url else "",
+                    f"- Poster: ![{title}]({img_url})" if img_url else ""
+                ]
+                screenings_md.append("\n".join([line for line in card_lines if line]))
+                
+            return "\n\n".join(screenings_md)
+
     # Strip scripts/styles to save token window
     for script in soup(["script", "style"]):
         script.extract()
@@ -123,10 +133,10 @@ def scrape_cinema_page(url: str) -> str:
     cleaned_text = "\n".join(lines)
     
     # Detail pages (like events or calendar bookings) are very short; limit their length to 6,000 chars.
-    # Main schedule index pages are limited to 20,000 chars.
+    # Main schedule index pages are limited to 80,000 chars.
     if "/event/" in url or "/calendar/" in url:
         return cleaned_text[:6000]
-    return cleaned_text[:20000]
+    return cleaned_text[:80000]
 
 def search_imdb_autocomplete(query: str, release_year: str = None) -> str:
     """Queries the IMDb public autocomplete suggestion endpoint and returns the best matching imdbID."""
